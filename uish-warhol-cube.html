@@ -1,0 +1,1201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WARHOL CUBE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════
+   RESET & ROOT
+═══════════════════════════════════════ */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --sz: min(52vw, 52vh);
+  --hsz: calc(var(--sz) / 2);
+
+  --front-clr:  #FF1FA3;
+  --back-clr:   #FFE000;
+  --right-clr:  #00F0FF;
+  --left-clr:   #ADFF2F;
+  --top-clr:    #FF6600;
+  --bottom-clr: #CC00FF;
+
+  --void: #050505;
+  --ui-bg: rgba(6,6,6,0.96);
+  --border: rgba(255,255,255,0.07);
+}
+
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  background: var(--void);
+  font-family: 'Anton', sans-serif;
+  user-select: none;
+}
+
+/* Halftone grain — Warhol silkscreen feel */
+body::before {
+  content: '';
+  position: fixed; inset: 0; z-index: 0;
+  background-image:
+    radial-gradient(circle, rgba(255,255,255,0.022) 1px, transparent 1px);
+  background-size: 8px 8px;
+  pointer-events: none;
+}
+
+/* ═══════════════════════════════════════
+   SCENE & CUBE
+═══════════════════════════════════════ */
+#scene {
+  position: fixed; inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  perspective: 1400px;
+  perspective-origin: 50% 46%;
+  cursor: grab;
+  z-index: 1;
+}
+#scene.dragging { cursor: grabbing; }
+
+#cube-wrap {
+  position: relative;
+  width: var(--sz);
+  height: var(--sz);
+  transform-style: preserve-3d;
+  transform: rotateX(-22deg) rotateY(38deg);
+  transition: transform 0.05s linear;
+  will-change: transform;
+}
+#cube-wrap.animating {
+  transition: transform 0.6s cubic-bezier(0.22,1,0.36,1);
+}
+
+/* ═══════════════════════════════════════
+   CUBE FACES
+═══════════════════════════════════════ */
+.face {
+  position: absolute;
+  width: var(--sz);
+  height: var(--sz);
+  border: 3px solid;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  backface-visibility: visible;
+  transition: box-shadow 0.3s;
+}
+
+.face--front  { transform: translateZ(var(--hsz));                    border-color: var(--front-clr);  }
+.face--back   { transform: rotateY(180deg)   translateZ(var(--hsz));  border-color: var(--back-clr);   }
+.face--right  { transform: rotateY(90deg)    translateZ(var(--hsz));  border-color: var(--right-clr);  }
+.face--left   { transform: rotateY(-90deg)   translateZ(var(--hsz));  border-color: var(--left-clr);   }
+.face--top    { transform: rotateX(90deg)    translateZ(var(--hsz));  border-color: var(--top-clr);    }
+.face--bottom { transform: rotateX(-90deg)   translateZ(var(--hsz));  border-color: var(--bottom-clr); }
+
+/* glow on hover — only when not dragging */
+.face--front:hover  { box-shadow: 0 0 40px var(--front-clr),  inset 0 0 60px rgba(255,31,163,0.08); }
+.face--back:hover   { box-shadow: 0 0 40px var(--back-clr),   inset 0 0 60px rgba(255,224,0,0.08);  }
+.face--right:hover  { box-shadow: 0 0 40px var(--right-clr),  inset 0 0 60px rgba(0,240,255,0.08);  }
+.face--left:hover   { box-shadow: 0 0 40px var(--left-clr),   inset 0 0 60px rgba(173,255,47,0.08); }
+.face--top:hover    { box-shadow: 0 0 40px var(--top-clr),    inset 0 0 60px rgba(255,102,0,0.08);  }
+.face--bottom:hover { box-shadow: 0 0 40px var(--bottom-clr), inset 0 0 60px rgba(204,0,255,0.08);  }
+
+/* Face header bar */
+.face-bar {
+  height: 26px;
+  min-height: 26px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 6px;
+  background: rgba(0,0,0,0.72);
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  font-family: 'Space Mono', monospace;
+  font-size: 8px;
+  letter-spacing: 1.5px;
+  z-index: 5;
+  position: relative;
+}
+.face-name { opacity: 0.5; text-transform: uppercase; }
+.face-controls { display: flex; gap: 3px; align-items: center; }
+
+/* small buttons in bar */
+.fbar-btn {
+  width: 20px; height: 20px;
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(0,0,0,0.5);
+  cursor: pointer;
+  font-size: 10px;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.1s;
+  color: inherit;
+  border-radius: 2px;
+  font-family: 'Space Mono', monospace;
+  line-height: 1;
+}
+.fbar-btn:hover { background: currentColor; border-color: currentColor; filter: invert(1) saturate(0); }
+
+/* ═══════════════════════════════════════
+   DROP ZONE
+═══════════════════════════════════════ */
+.face-body {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: rgba(0,0,0,0.85);
+  min-height: 0;
+}
+
+.drop-zone {
+  position: absolute; inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-align: center;
+  padding: 20px;
+  transition: background 0.15s, border-color 0.15s;
+  cursor: pointer;
+  z-index: 3;
+}
+.drop-zone.loaded { display: none; }
+.drop-zone.hovering {
+  background: rgba(255,255,255,0.05);
+}
+
+.drop-icon {
+  font-size: clamp(2rem, 6vw, 4rem);
+  opacity: 0.25;
+  line-height: 1;
+  transition: opacity 0.2s;
+}
+.drop-zone.hovering .drop-icon { opacity: 0.7; }
+
+.drop-label {
+  font-family: 'Space Mono', monospace;
+  font-size: clamp(7px, 1.2vw, 11px);
+  letter-spacing: 2px;
+  opacity: 0.35;
+  text-transform: uppercase;
+  line-height: 1.8;
+}
+.drop-sub {
+  font-family: 'Space Mono', monospace;
+  font-size: clamp(6px, 0.9vw, 9px);
+  opacity: 0.18;
+  letter-spacing: 1px;
+}
+
+/* ═══════════════════════════════════════
+   IFRAME INSIDE FACE
+═══════════════════════════════════════ */
+.face-iframe-wrap {
+  position: absolute; inset: 0;
+  overflow: hidden;
+  display: none;
+  z-index: 1;
+}
+.face-iframe-wrap.on { display: block; }
+
+.face-iframe-wrap iframe {
+  position: absolute;
+  top: 0; left: 0;
+  border: none;
+  display: block;
+  transform-origin: top left;
+  pointer-events: auto;
+}
+
+/* block iframe interaction during cube drag */
+.dragging .face-iframe-wrap::after {
+  content: '';
+  position: absolute; inset: 0;
+  z-index: 999;
+}
+
+/* zoom badge */
+.zoom-badge {
+  position: absolute;
+  bottom: 5px; right: 6px;
+  font-family: 'Space Mono', monospace;
+  font-size: 8px;
+  background: rgba(0,0,0,0.85);
+  padding: 2px 5px;
+  z-index: 6;
+  pointer-events: none;
+  display: none;
+  border-radius: 2px;
+  letter-spacing: 0.5px;
+}
+
+/* spinner */
+.face-loading {
+  position: absolute; inset: 0;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.88);
+  z-index: 7;
+  gap: 8px;
+  font-family: 'Space Mono', monospace;
+  font-size: 8px;
+  letter-spacing: 2px;
+}
+.face-loading.on { display: flex; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin-ring {
+  width: 22px; height: 22px;
+  border: 2px solid rgba(255,255,255,0.1);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+
+/* ═══════════════════════════════════════
+   LEFT SIDEBAR — FACE NAV
+═══════════════════════════════════════ */
+#sidebar-left {
+  position: fixed;
+  left: 14px; top: 50%;
+  transform: translateY(-50%);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.snap-btn {
+  width: 38px; height: 38px;
+  border: 2px solid;
+  background: rgba(0,0,0,0.88);
+  cursor: pointer;
+  font-family: 'Space Mono', monospace;
+  font-size: 7px;
+  letter-spacing: 0.5px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  transition: all 0.14s;
+  line-height: 1;
+}
+.snap-btn:hover { filter: brightness(1.5); transform: scale(1.08); }
+
+/* ═══════════════════════════════════════
+   TITLE
+═══════════════════════════════════════ */
+#title-bar {
+  position: fixed;
+  top: 14px; left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  text-align: center;
+  pointer-events: none;
+}
+#title-bar h1 {
+  font-family: 'Anton', sans-serif;
+  font-size: clamp(18px, 3vw, 32px);
+  letter-spacing: 10px;
+  color: #FF1FA3;
+  text-shadow:
+    2px 2px 0 #FFE000,
+    4px 4px 0 #00F0FF,
+    -1px -1px 0 rgba(255,31,163,0.3);
+  white-space: nowrap;
+}
+#title-sub {
+  font-family: 'Space Mono', monospace;
+  font-size: 8px;
+  letter-spacing: 4px;
+  color: rgba(255,255,255,0.2);
+  margin-top: 2px;
+}
+
+/* ═══════════════════════════════════════
+   RIGHT HUD — ENTER WORLD
+═══════════════════════════════════════ */
+#hud-right {
+  position: fixed;
+  right: 14px; top: 50%;
+  transform: translateY(-50%);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: 140px;
+  border: 1px solid var(--border);
+  background: var(--ui-bg);
+}
+
+#hud-right-header {
+  padding: 7px 10px;
+  font-family: 'Space Mono', monospace;
+  font-size: 7.5px;
+  letter-spacing: 2px;
+  color: rgba(255,255,255,0.25);
+  border-bottom: 1px solid var(--border);
+  text-transform: uppercase;
+}
+
+.world-entry {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.world-entry-face {
+  font-family: 'Space Mono', monospace;
+  font-size: 8px;
+  letter-spacing: 1px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.world-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.world-title {
+  opacity: 0.55;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  font-size: 7.5px;
+}
+
+.enter-btn {
+  width: 100%;
+  height: 24px;
+  border: 1px solid;
+  background: transparent;
+  cursor: pointer;
+  font-family: 'Space Mono', monospace;
+  font-size: 7.5px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  transition: all 0.12s;
+}
+.enter-btn:hover { filter: brightness(1.3); }
+.enter-btn:active { transform: scale(0.97); }
+
+#hud-empty {
+  padding: 16px 10px;
+  font-family: 'Space Mono', monospace;
+  font-size: 7.5px;
+  letter-spacing: 1px;
+  color: rgba(255,255,255,0.15);
+  text-align: center;
+  line-height: 2;
+}
+
+/* ═══════════════════════════════════════
+   BOTTOM BAR
+═══════════════════════════════════════ */
+#bottom-bar {
+  position: fixed;
+  bottom: 14px; left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.bb-btn {
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(0,0,0,0.88);
+  cursor: pointer;
+  font-family: 'Space Mono', monospace;
+  font-size: 8px;
+  letter-spacing: 1px;
+  color: rgba(255,255,255,0.5);
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.12s;
+}
+.bb-btn:hover { color: #fff; border-color: rgba(255,255,255,0.4); }
+.bb-btn.active { color: #FF1FA3; border-color: #FF1FA3; }
+
+/* ═══════════════════════════════════════
+   ENTER WORLD FULLSCREEN OVERLAY
+═══════════════════════════════════════ */
+#world-overlay {
+  position: fixed; inset: 0;
+  z-index: 9999;
+  display: none;
+  flex-direction: column;
+  background: #000;
+}
+#world-overlay.on { display: flex; }
+
+#world-topbar {
+  height: 38px;
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  gap: 12px;
+  background: rgba(0,0,0,0.95);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  flex-shrink: 0;
+  z-index: 2;
+}
+
+#world-return {
+  height: 26px;
+  padding: 0 12px;
+  border: 1px solid #FF1FA3;
+  background: transparent;
+  cursor: pointer;
+  font-family: 'Space Mono', monospace;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #FF1FA3;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.12s;
+  white-space: nowrap;
+}
+#world-return:hover { background: #FF1FA3; color: #000; }
+
+#world-face-label {
+  font-family: 'Space Mono', monospace;
+  font-size: 8px;
+  letter-spacing: 2px;
+  color: rgba(255,255,255,0.3);
+}
+
+#world-iframe-wrap {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  min-height: 0;
+}
+
+#world-iframe {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  border: none;
+  display: block;
+}
+
+/* world zoom controls */
+#world-zoom {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.wz-btn {
+  width: 26px; height: 26px;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(0,0,0,0.5);
+  cursor: pointer;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255,255,255,0.6);
+  transition: all 0.1s;
+  font-family: 'Space Mono', monospace;
+}
+.wz-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+#world-zoom-badge {
+  font-family: 'Space Mono', monospace;
+  font-size: 8px;
+  color: rgba(255,255,255,0.3);
+  min-width: 32px;
+  text-align: center;
+}
+
+/* ═══════════════════════════════════════
+   ROTATE ARROWS (floating near cube)
+═══════════════════════════════════════ */
+.rot-arrow {
+  position: fixed;
+  z-index: 99;
+  width: 32px; height: 32px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(0,0,0,0.88);
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255,255,255,0.4);
+  transition: all 0.12s;
+}
+.rot-arrow:hover { color: #fff; border-color: rgba(255,255,255,0.4); }
+#rot-up    { top: calc(50% - 56px - var(--hsz)); left: 50%; transform: translateX(-50%); }
+#rot-down  { top: calc(50% + var(--hsz) + 20px); left: 50%; transform: translateX(-50%); }
+#rot-left  { left: calc(50% - var(--hsz) - 52px); top: 50%; transform: translateY(-50%); }
+#rot-right { left: calc(50% + var(--hsz) + 20px); top: 50%; transform: translateY(-50%); }
+
+/* file input hidden */
+#file-input { display: none; }
+</style>
+</head>
+<body>
+
+<!-- ═══════ TITLE ═══════ -->
+<div id="title-bar">
+  <h1>WARHOL CUBE</h1>
+  <div id="title-sub">DRAG HTML · ORBIT · ENTER WORLD</div>
+</div>
+
+<!-- ═══════ SCENE ═══════ -->
+<div id="scene">
+  <div id="cube-wrap">
+    <!-- faces built by JS -->
+  </div>
+</div>
+
+<!-- ═══════ ROTATION ARROWS ═══════ -->
+<button class="rot-arrow" id="rot-up"    onclick="nudge(-20,0)"   title="Tilt up">▲</button>
+<button class="rot-arrow" id="rot-down"  onclick="nudge(20,0)"    title="Tilt down">▼</button>
+<button class="rot-arrow" id="rot-left"  onclick="nudge(0,-25)"   title="Rotate left">◀</button>
+<button class="rot-arrow" id="rot-right" onclick="nudge(0,25)"    title="Rotate right">▶</button>
+
+<!-- ═══════ LEFT SIDEBAR — SNAP TO FACE ═══════ -->
+<div id="sidebar-left">
+  <div style="font-family:'Space Mono',monospace;font-size:6.5px;letter-spacing:1.5px;color:rgba(255,255,255,0.15);text-align:center;margin-bottom:2px;text-transform:uppercase">Faces</div>
+</div>
+
+<!-- ═══════ RIGHT HUD — ENTER WORLD ═══════ -->
+<div id="hud-right">
+  <div id="hud-right-header">↳ Enter World</div>
+  <div id="hud-list">
+    <div id="hud-empty">Drop HTML onto<br>any face to begin</div>
+  </div>
+</div>
+
+<!-- ═══════ BOTTOM BAR ═══════ -->
+<div id="bottom-bar">
+  <button class="bb-btn" id="btn-autorot" onclick="toggleAuto()">⊙ Auto Rotate</button>
+  <button class="bb-btn" onclick="resetView()">⟳ Reset View</button>
+  <button class="bb-btn" onclick="clearAll()">✕ Clear All</button>
+</div>
+
+<!-- ═══════ FULLSCREEN WORLD OVERLAY ═══════ -->
+<div id="world-overlay">
+  <div id="world-topbar">
+    <button id="world-return" onclick="exitWorld()">← Return</button>
+    <div id="world-face-label">FACE · —</div>
+    <div id="world-zoom">
+      <button class="wz-btn" onclick="worldZoom(1.25)">+</button>
+      <span id="world-zoom-badge">100%</span>
+      <button class="wz-btn" onclick="worldZoom(0.8)">−</button>
+      <button class="wz-btn" onclick="worldZoomReset()" title="Reset zoom" style="font-size:9px">⊡</button>
+    </div>
+  </div>
+  <div id="world-iframe-wrap">
+    <iframe id="world-iframe" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-pointer-lock"></iframe>
+  </div>
+</div>
+
+<input type="file" id="file-input" accept=".html,.htm,.svg,.xhtml">
+
+<script>
+'use strict';
+
+// ═══════════════════════════════════════════════════════════
+//  CONFIG
+// ═══════════════════════════════════════════════════════════
+const FACES = [
+  { id: 'front',  label: 'FRONT',  clr: '#FF1FA3', snapX: -22, snapY:  0   },
+  { id: 'back',   label: 'BACK',   clr: '#FFE000', snapX: -22, snapY: 180  },
+  { id: 'right',  label: 'RIGHT',  clr: '#00F0FF', snapX: -22, snapY: -90  },
+  { id: 'left',   label: 'LEFT',   clr: '#ADFF2F', snapX: -22, snapY:  90  },
+  { id: 'top',    label: 'TOP',    clr: '#FF6600', snapX: -90, snapY:  0   },
+  { id: 'bottom', label: 'BOTTOM', clr: '#CC00FF', snapX:  90, snapY:  0   },
+];
+
+// ═══════════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════════
+const S = {
+  rotX: -22, rotY: 38,
+  dragging: false, lx: 0, ly: 0,
+  autoRot: false, arFrame: null,
+  worldZoom: 1,
+  worldActive: null,     // face id currently in "enter world"
+  fileTarget: null,
+  panels: {},  // faceId → { srcdoc, title, zoom }
+};
+
+// ═══════════════════════════════════════════════════════════
+//  ELEMENTS
+// ═══════════════════════════════════════════════════════════
+const scene       = document.getElementById('scene');
+const cubeWrap    = document.getElementById('cube-wrap');
+const hudList     = document.getElementById('hud-list');
+const hudEmpty    = document.getElementById('hud-empty');
+const btnAR       = document.getElementById('btn-autorot');
+const worldOverlay= document.getElementById('world-overlay');
+const worldIframe = document.getElementById('world-iframe');
+const worldLabel  = document.getElementById('world-face-label');
+const worldZBadge = document.getElementById('world-zoom-badge');
+const fileInp     = document.getElementById('file-input');
+const sidebar     = document.getElementById('sidebar-left');
+
+// ═══════════════════════════════════════════════════════════
+//  BUILD CUBE FACES
+// ═══════════════════════════════════════════════════════════
+function buildCube() {
+  FACES.forEach(f => {
+    const face = document.createElement('div');
+    face.className = `face face--${f.id}`;
+    face.id = `face-${f.id}`;
+    face.style.color = f.clr;
+    face.style.background = 'rgba(0,0,0,0.88)';
+
+    // Bar
+    const bar = document.createElement('div');
+    bar.className = 'face-bar';
+    bar.style.color = f.clr;
+
+    const nameSp = document.createElement('span');
+    nameSp.className = 'face-name';
+    nameSp.textContent = f.label;
+
+    const ctrls = document.createElement('div');
+    ctrls.className = 'face-controls';
+
+    const mkBtn = (icon, title, fn) => {
+      const b = document.createElement('button');
+      b.className = 'fbar-btn'; b.title = title;
+      b.textContent = icon;
+      b.style.color = f.clr;
+      b.addEventListener('click', e => { e.stopPropagation(); safeRun(fn); });
+      return b;
+    };
+
+    ctrls.appendChild(mkBtn('+', 'Zoom In',    () => faceZoom(f.id, 1.25)));
+    ctrls.appendChild(mkBtn('−', 'Zoom Out',   () => faceZoom(f.id, 0.8)));
+    ctrls.appendChild(mkBtn('⊡', 'Reset Zoom', () => faceZoomSet(f.id, 1)));
+    ctrls.appendChild(mkBtn('⟳', 'Reload',     () => faceReload(f.id)));
+    ctrls.appendChild(mkBtn('✕', 'Clear',      () => faceClear(f.id)));
+
+    bar.appendChild(nameSp);
+    bar.appendChild(ctrls);
+
+    // Body
+    const body = document.createElement('div');
+    body.className = 'face-body';
+    body.id = `body-${f.id}`;
+
+    // Drop zone
+    const dz = document.createElement('div');
+    dz.className = 'drop-zone';
+    dz.id = `dz-${f.id}`;
+    dz.innerHTML = `
+      <div class="drop-icon">⊞</div>
+      <div class="drop-label" style="color:${f.clr}">Drop HTML here<br>or click to browse</div>
+      <div class="drop-sub">${f.label} FACE</div>
+    `;
+    dz.style.color = f.clr;
+    dz.addEventListener('click', () => { S.fileTarget = f.id; fileInp.value = ''; fileInp.click(); });
+    dz.addEventListener('dragover', e => { e.preventDefault(); e.stopPropagation(); dz.classList.add('hovering'); });
+    dz.addEventListener('dragleave', e => { if (!body.contains(e.relatedTarget)) dz.classList.remove('hovering'); });
+    dz.addEventListener('drop', e => { e.preventDefault(); e.stopPropagation(); dz.classList.remove('hovering'); handleDrop(e, f.id); });
+
+    // Also allow drop on body when loaded
+    body.addEventListener('dragover', e => { e.preventDefault(); e.stopPropagation(); });
+    body.addEventListener('drop', e => { e.preventDefault(); e.stopPropagation(); handleDrop(e, f.id); });
+
+    // iframe wrap
+    const ifw = document.createElement('div');
+    ifw.className = 'face-iframe-wrap';
+    ifw.id = `ifw-${f.id}`;
+
+    // spinner
+    const spin = document.createElement('div');
+    spin.className = 'face-loading';
+    spin.id = `spin-${f.id}`;
+    spin.style.color = f.clr;
+    spin.innerHTML = `<div class="spin-ring"></div><div style="font-family:'Space Mono',monospace;font-size:7px;letter-spacing:2px;opacity:0.6">LOADING</div>`;
+
+    // zoom badge
+    const zb = document.createElement('div');
+    zb.className = 'zoom-badge';
+    zb.id = `zb-${f.id}`;
+    zb.style.color = f.clr;
+
+    body.appendChild(dz);
+    body.appendChild(ifw);
+    body.appendChild(spin);
+    body.appendChild(zb);
+
+    face.appendChild(bar);
+    face.appendChild(body);
+    cubeWrap.appendChild(face);
+
+    // Init panel state
+    S.panels[f.id] = { srcdoc: null, title: f.label, zoom: 1 };
+  });
+
+  // Build sidebar snap buttons
+  FACES.forEach(f => {
+    const btn = document.createElement('button');
+    btn.className = 'snap-btn';
+    btn.style.borderColor = f.clr;
+    btn.style.color = f.clr;
+    btn.innerHTML = `<span style="font-size:9px">⊞</span><span>${f.label.slice(0,3)}</span>`;
+    btn.title = `Snap to ${f.label} face`;
+    btn.addEventListener('click', () => snapToFace(f.id));
+    sidebar.appendChild(btn);
+  });
+
+  applyTransform();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  FILE / DROP HANDLING
+// ═══════════════════════════════════════════════════════════
+function handleDrop(e, faceId) {
+  const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (file) {
+    readAndLoad(faceId, file);
+    return;
+  }
+  // Handle dragged HTML text (from another browser, etc)
+  const html = e.dataTransfer.getData('text/html');
+  if (html) { loadSrcdoc(faceId, html, 'Dropped HTML'); return; }
+}
+
+function readAndLoad(faceId, file) {
+  const reader = new FileReader();
+  reader.onload = ev => {
+    loadSrcdoc(faceId, ev.target.result, file.name.replace(/\.[^.]+$/, ''));
+  };
+  reader.onerror = () => console.warn('[WC] FileReader failed');
+  reader.readAsText(file);
+}
+
+fileInp.addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (file && S.fileTarget) readAndLoad(S.fileTarget, file);
+  S.fileTarget = null;
+  e.target.value = '';
+});
+
+// ═══════════════════════════════════════════════════════════
+//  LOAD HTML INTO FACE
+// ═══════════════════════════════════════════════════════════
+function loadSrcdoc(faceId, srcdoc, title) {
+  const p = S.panels[faceId];
+  if (!p) return;
+
+  p.srcdoc = srcdoc;
+  p.title  = title || faceId;
+  p.zoom   = 1;
+
+  const ifw  = document.getElementById(`ifw-${faceId}`);
+  const dz   = document.getElementById(`dz-${faceId}`);
+  const spin = document.getElementById(`spin-${faceId}`);
+  const zb   = document.getElementById(`zb-${faceId}`);
+
+  // remove old iframe if any
+  const old = ifw.querySelector('iframe');
+  if (old) { try { old.src = 'about:blank'; } catch {} ifw.removeChild(old); }
+
+  // show spinner
+  spin.classList.add('on');
+  dz.classList.remove('loaded');
+  ifw.classList.remove('on');
+  zb.style.display = 'none';
+
+  const ifr = document.createElement('iframe');
+  ifr.sandbox = 'allow-scripts allow-same-origin allow-forms allow-popups allow-pointer-lock allow-downloads';
+  ifw.appendChild(ifr);
+
+  ifr.onload = () => {
+    spin.classList.remove('on');
+    dz.classList.add('loaded');
+    ifw.classList.add('on');
+    applyFaceZoom(faceId);
+    refreshHUD();
+  };
+  ifr.onerror = () => {
+    spin.classList.remove('on');
+    console.warn('[WC] iframe load error on', faceId);
+  };
+
+  ifr.srcdoc = srcdoc;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  FACE ZOOM
+// ═══════════════════════════════════════════════════════════
+function faceZoom(faceId, factor) {
+  const p = S.panels[faceId];
+  if (!p) return;
+  p.zoom = Math.max(0.1, Math.min(5, p.zoom * factor));
+  applyFaceZoom(faceId);
+}
+
+function faceZoomSet(faceId, z) {
+  const p = S.panels[faceId]; if (!p) return;
+  p.zoom = z;
+  applyFaceZoom(faceId);
+}
+
+function applyFaceZoom(faceId) {
+  const ifw = document.getElementById(`ifw-${faceId}`);
+  const zb  = document.getElementById(`zb-${faceId}`);
+  if (!ifw) return;
+  const ifr = ifw.querySelector('iframe');
+  if (!ifr) return;
+  const z  = S.panels[faceId].zoom;
+  const pw = ifw.offsetWidth  || 400;
+  const ph = ifw.offsetHeight || 400;
+  ifr.style.width     = `${Math.round(pw / z)}px`;
+  ifr.style.height    = `${Math.round(ph / z)}px`;
+  ifr.style.transform = `scale(${z})`;
+  const pct = Math.round(z * 100);
+  zb.textContent     = pct + '%';
+  zb.style.display   = pct === 100 ? 'none' : 'block';
+}
+
+function faceReload(faceId) {
+  const p = S.panels[faceId];
+  if (!p || !p.srcdoc) return;
+  const ifw = document.getElementById(`ifw-${faceId}`);
+  const ifr = ifw && ifw.querySelector('iframe');
+  if (!ifr) return;
+  const saved = p.srcdoc;
+  ifr.srcdoc = '';
+  setTimeout(() => { ifr.srcdoc = saved; }, 40);
+}
+
+function faceClear(faceId) {
+  const p = S.panels[faceId]; if (!p) return;
+  const ifw  = document.getElementById(`ifw-${faceId}`);
+  const dz   = document.getElementById(`dz-${faceId}`);
+  const spin = document.getElementById(`spin-${faceId}`);
+  const zb   = document.getElementById(`zb-${faceId}`);
+  if (!ifw) return;
+  const ifr = ifw.querySelector('iframe');
+  if (ifr) { try { ifr.src = 'about:blank'; } catch {} ifw.removeChild(ifr); }
+  ifw.classList.remove('on');
+  spin.classList.remove('on');
+  dz.classList.remove('loaded');
+  zb.style.display = 'none';
+  p.srcdoc = null; p.zoom = 1;
+  refreshHUD();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  HUD — ENTER WORLD
+// ═══════════════════════════════════════════════════════════
+function refreshHUD() {
+  hudList.innerHTML = '';
+  const loaded = FACES.filter(f => S.panels[f.id] && S.panels[f.id].srcdoc);
+  if (!loaded.length) {
+    hudList.appendChild(hudEmpty);
+    return;
+  }
+  loaded.forEach(f => {
+    const p   = S.panels[f.id];
+    const row = document.createElement('div');
+    row.className = 'world-entry';
+
+    const nameRow = document.createElement('div');
+    nameRow.className = 'world-entry-face';
+    const dot = document.createElement('div');
+    dot.className = 'world-dot';
+    dot.style.background = f.clr;
+    const title = document.createElement('div');
+    title.className = 'world-title';
+    title.style.color = f.clr;
+    title.textContent = p.title;
+    nameRow.appendChild(dot);
+    nameRow.appendChild(title);
+
+    const btn = document.createElement('button');
+    btn.className = 'enter-btn';
+    btn.style.borderColor = f.clr;
+    btn.style.color = f.clr;
+    btn.innerHTML = `<span>↳</span><span>Enter World</span>`;
+    btn.addEventListener('click', () => enterWorld(f.id));
+
+    row.appendChild(nameRow);
+    row.appendChild(btn);
+    hudList.appendChild(row);
+  });
+}
+
+function enterWorld(faceId) {
+  const p = S.panels[faceId];
+  if (!p || !p.srcdoc) return;
+  const f = FACES.find(x => x.id === faceId);
+
+  S.worldActive = faceId;
+  S.worldZoom   = 1;
+
+  // Set srcdoc
+  worldIframe.srcdoc = '';
+  setTimeout(() => {
+    worldIframe.srcdoc = p.srcdoc;
+    worldIframe.style.transform = 'scale(1)';
+    worldIframe.style.transformOrigin = 'top left';
+    worldIframe.style.width  = '100%';
+    worldIframe.style.height = '100%';
+  }, 20);
+
+  worldLabel.textContent = `FACE · ${f ? f.label : faceId}`;
+  worldLabel.style.color = f ? f.clr : '#fff';
+  worldZBadge.textContent = '100%';
+  worldOverlay.classList.add('on');
+}
+
+function exitWorld() {
+  worldOverlay.classList.remove('on');
+  // blank the iframe to stop any audio/video
+  setTimeout(() => { try { worldIframe.srcdoc = ''; } catch {} }, 300);
+  S.worldActive = null;
+}
+
+function worldZoom(factor) {
+  S.worldZoom = Math.max(0.1, Math.min(5, S.worldZoom * factor));
+  applyWorldZoom();
+}
+function worldZoomReset() { S.worldZoom = 1; applyWorldZoom(); }
+function applyWorldZoom() {
+  const z   = S.worldZoom;
+  const wrap = document.getElementById('world-iframe-wrap');
+  const w   = wrap.offsetWidth;
+  const h   = wrap.offsetHeight;
+  worldIframe.style.width     = `${Math.round(w / z)}px`;
+  worldIframe.style.height    = `${Math.round(h / z)}px`;
+  worldIframe.style.transform = `scale(${z})`;
+  worldIframe.style.transformOrigin = 'top left';
+  worldZBadge.textContent = Math.round(z * 100) + '%';
+}
+
+// ═══════════════════════════════════════════════════════════
+//  3D CONTROLS
+// ═══════════════════════════════════════════════════════════
+function applyTransform(animated) {
+  if (animated) {
+    cubeWrap.classList.add('animating');
+    setTimeout(() => cubeWrap.classList.remove('animating'), 650);
+  }
+  cubeWrap.style.transform = `rotateX(${S.rotX}deg) rotateY(${S.rotY}deg)`;
+}
+
+function snapToFace(faceId) {
+  stopAuto();
+  const f = FACES.find(x => x.id === faceId);
+  if (!f) return;
+  S.rotX = f.snapX; S.rotY = f.snapY;
+  applyTransform(true);
+}
+
+function nudge(dx, dy) {
+  stopAuto();
+  S.rotX = Math.max(-88, Math.min(88, S.rotX + dx));
+  S.rotY += dy;
+  applyTransform(true);
+}
+
+function resetView() {
+  stopAuto();
+  S.rotX = -22; S.rotY = 38;
+  applyTransform(true);
+}
+
+// ── Auto-rotate ─────────────────────────────────────────────
+function toggleAuto() {
+  if (S.autoRot) stopAuto();
+  else startAuto();
+}
+function startAuto() {
+  S.autoRot = true;
+  btnAR.classList.add('active');
+  arTick();
+}
+function stopAuto() {
+  S.autoRot = false;
+  btnAR.classList.remove('active');
+  if (S.arFrame) { cancelAnimationFrame(S.arFrame); S.arFrame = null; }
+}
+function arTick() {
+  if (!S.autoRot) return;
+  S.rotY += 0.25;
+  cubeWrap.style.transform = `rotateX(${S.rotX}deg) rotateY(${S.rotY}deg)`;
+  S.arFrame = requestAnimationFrame(arTick);
+}
+
+// ── Mouse drag orbit ────────────────────────────────────────
+scene.addEventListener('mousedown', e => {
+  // Only drag on background (not on face buttons/dropzones)
+  if (e.target.closest('.face-controls') || e.target.closest('.drop-zone')) return;
+  if (e.button !== 0) return;
+  S.dragging = true; S.lx = e.clientX; S.ly = e.clientY;
+  scene.classList.add('dragging');
+  stopAuto();
+  e.preventDefault();
+});
+
+window.addEventListener('mousemove', e => {
+  if (!S.dragging) return;
+  const dx = e.clientX - S.lx;
+  const dy = e.clientY - S.ly;
+  S.lx = e.clientX; S.ly = e.clientY;
+  S.rotY += dx * 0.45;
+  S.rotX  = Math.max(-88, Math.min(88, S.rotX - dy * 0.32));
+  cubeWrap.style.transform = `rotateX(${S.rotX}deg) rotateY(${S.rotY}deg)`;
+});
+
+window.addEventListener('mouseup', () => {
+  S.dragging = false;
+  scene.classList.remove('dragging');
+});
+
+// ── Scroll to zoom scene perspective ───────────────────────
+scene.addEventListener('wheel', e => {
+  e.preventDefault();
+  const curr = parseFloat(scene.style.perspective) || 1400;
+  const next  = Math.max(400, Math.min(4000, curr * (e.deltaY > 0 ? 1.1 : 0.9)));
+  scene.style.perspective = next + 'px';
+}, { passive: false });
+
+// ── Touch ────────────────────────────────────────────────────
+let _touch1 = null, _touchDist = 0;
+scene.addEventListener('touchstart', e => {
+  if (e.touches.length === 1) { _touch1 = e.touches[0]; stopAuto(); }
+  else if (e.touches.length === 2) { _touchDist = pinchD(e.touches); }
+}, { passive: true });
+scene.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (e.touches.length === 1 && _touch1) {
+    const dx = e.touches[0].clientX - _touch1.clientX;
+    const dy = e.touches[0].clientY - _touch1.clientY;
+    S.rotY += dx * 0.45;
+    S.rotX  = Math.max(-88, Math.min(88, S.rotX - dy * 0.32));
+    cubeWrap.style.transform = `rotateX(${S.rotX}deg) rotateY(${S.rotY}deg)`;
+    _touch1 = e.touches[0];
+  } else if (e.touches.length === 2) {
+    const d = pinchD(e.touches);
+    const curr = parseFloat(scene.style.perspective) || 1400;
+    scene.style.perspective = Math.max(400, Math.min(4000, curr * (_touchDist / d))) + 'px';
+    _touchDist = d;
+  }
+}, { passive: false });
+scene.addEventListener('touchend', () => { _touch1 = null; });
+
+function pinchD(t) { return Math.hypot(t[0].clientX-t[1].clientX, t[0].clientY-t[1].clientY); }
+
+// ── Keyboard ────────────────────────────────────────────────
+window.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (worldOverlay.classList.contains('on')) {
+    if (e.key === 'Escape') exitWorld();
+    return;
+  }
+  const k = e.key;
+  if (k === 'ArrowLeft')  { nudge(0, -25); return; }
+  if (k === 'ArrowRight') { nudge(0,  25); return; }
+  if (k === 'ArrowUp')    { nudge(-20, 0); return; }
+  if (k === 'ArrowDown')  { nudge( 20, 0); return; }
+  if (k === 'r' || k === 'R') { resetView(); return; }
+  if (k === ' ') { e.preventDefault(); toggleAuto(); return; }
+  if (k === 'Escape') { stopAuto(); return; }
+  const faceKeys = {'1':'front','2':'back','3':'right','4':'left','5':'top','6':'bottom'};
+  if (faceKeys[k]) snapToFace(faceKeys[k]);
+});
+
+// ═══════════════════════════════════════════════════════════
+//  GLOBAL DROP onto the scene (not on a face)
+// ═══════════════════════════════════════════════════════════
+scene.addEventListener('dragover', e => e.preventDefault());
+scene.addEventListener('drop', e => {
+  e.preventDefault();
+  // Find which face we dropped on by checking the target
+  const faceEl = e.target.closest('.face');
+  if (faceEl) {
+    const fid = faceEl.id.replace('face-','');
+    const file = e.dataTransfer.files[0];
+    if (file) { readAndLoad(fid, file); return; }
+  }
+  // No face found — load into first empty face
+  const emptyFace = FACES.find(f => !S.panels[f.id].srcdoc);
+  if (!emptyFace) return;
+  const file = e.dataTransfer.files[0];
+  if (file) readAndLoad(emptyFace.id, file);
+});
+
+// ═══════════════════════════════════════════════════════════
+//  MISC
+// ═══════════════════════════════════════════════════════════
+function clearAll() {
+  if (!confirm('Clear all faces?')) return;
+  FACES.forEach(f => faceClear(f.id));
+}
+
+function safeRun(fn) {
+  try { fn(); } catch(e) { console.warn('[WC]', e); }
+}
+
+// Global error shield
+window.addEventListener('error', e => {
+  if (e.target && e.target.tagName === 'IFRAME') { e.preventDefault(); return false; }
+}, true);
+window.addEventListener('unhandledrejection', e => e.preventDefault());
+
+// Resize — re-apply face zoom
+window.addEventListener('resize', () => {
+  FACES.forEach(f => { if (S.panels[f.id].srcdoc) applyFaceZoom(f.id); });
+});
+
+// ═══════════════════════════════════════════════════════════
+//  BOOT
+// ═══════════════════════════════════════════════════════════
+buildCube();
+refreshHUD();
+
+// tiny intro: gently rotate in
+let intro = 0;
+const introAnim = () => {
+  if (intro < 60) {
+    S.rotY = 38 - (intro * 0.1);
+    cubeWrap.style.transform = `rotateX(${S.rotX}deg) rotateY(${S.rotY}deg)`;
+    intro++;
+    requestAnimationFrame(introAnim);
+  } else {
+    S.rotY = 38 - 6;
+  }
+};
+requestAnimationFrame(introAnim);
+
+console.log('%c WARHOL CUBE ', 'background:#FF1FA3;color:#FFE000;font-size:16px;font-weight:900;padding:3px 10px');
+console.log('%c 6 faces ready. Drag HTML files onto any face.', 'color:#ADFF2F');
+</script>
+</body>
+</html>
